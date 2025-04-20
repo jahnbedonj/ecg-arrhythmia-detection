@@ -1,0 +1,7 @@
+streamlit
+wfdb
+tensorflow
+numpy
+matplotlib
+plotly
+scipy
