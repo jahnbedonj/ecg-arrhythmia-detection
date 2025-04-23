@@ -10,6 +10,8 @@ def plot_ecg_signal(ecg_data, time):
         'Voltaje (mV)': ecg_data[:, 0]
     })
     st.line_chart(df_ecg.set_index('Tiempo (ms)'))
+    st.write("Este grafico muestra la señal ECG en milisegundos.")
+    st.write("Eje X: Tiempo (ms) - Eje Y: Voltaje (mV)")
 
 def plot_qrs_detection(ecg_data, qrs_indices, time):
     st.write("Mostrando los puntos de los complejos QRS detectados...")
@@ -35,3 +37,4 @@ def plot_qrs_detection(ecg_data, qrs_indices, time):
     
     # gráfico de los puntos QRS
     st.line_chart(df_qrs.set_index(pd.Index(range(len(ecg_data)))))
+
