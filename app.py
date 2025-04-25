@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import wfdb
 import matplotlib.pyplot as plt
-# Asegúrate de que src.file_upload, src.data_preprocessing, src.visualization, src.analysis existan y sean correctos
 from src import file_upload, data_preprocessing, visualization, analysis
 import neurokit2 as nk
 
