@@ -5,6 +5,6 @@ numpy
 matplotlib
 plotly
 scipy
-openai
+openai==0.28
 neurokit2
 python-dotenv
