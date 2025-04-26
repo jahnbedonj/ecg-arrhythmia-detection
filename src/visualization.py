@@ -35,154 +35,111 @@ def validate_x_range(x_range, time):
 
     return [valid_min, valid_max]
 
+def validate_x_range(x_range, time):
+    if x_range is None:
+        return time[0], time[-1]
+    return max(time[0], x_range[0]), min(time[-1], x_range[1])
 
-def plot_ecg_signal_single_lead(signal, time, fs, lead_name="ECG Signal", x_range=None): # <-- Añadir x_range=None
-    """
-    Plotea una única señal ECG con una cuadrícula que simula el papel electrocardiográfico,
-    permitiendo especificar el rango del eje X.
+def plot_ecg_signal_single_lead(signal, time, fs, lead_name="ECG Signal", x_range=None):
+    st.write(f"Mostrando señal de la derivación **{lead_name}** con cuadrícula estilo papel ECG.")
 
-    Args:
-        signal (np.ndarray): Array NumPy con los valores de voltaje de la señal (ya en mV).
-        time (np.ndarray): Array NumPy con los valores de tiempo correspondientes (ya en ms).
-        fs (int): Frecuencia de muestreo de la señal en Hz.
-        lead_name (str): Nombre de la derivación a mostrar.
-        x_range (list or tuple, optional): Rango de tiempo [min_ms, max_ms] para el eje X.
-                                           Si es None, se usa el rango completo.
-    """
-    st.write(f"Mostrando la señal de la derivación '{lead_name}' con cuadrícula de papel ECG...")
+    x_min, x_max = x_range if x_range else (time[0], time[-1])
+    indices = np.where((time >= x_min) & (time <= x_max))[0]
 
-    # Validar y ajustar el rango X
-    display_x_range = validate_x_range(x_range, time)
-    x_min, x_max = display_x_range
+    if len(indices) == 0:
+        st.warning("El rango de tiempo seleccionado no contiene datos.")
+        return
 
-    # Filtrar datos para el rango de visualización para mejorar el rendimiento si la señal es muy larga
-    indices_in_range = np.where((time >= x_min) & (time <= x_max))[0]
-    if len(indices_in_range) == 0:
-        st.warning("El rango de tiempo seleccionado no contiene datos de señal.")
-        return # Salir si no hay datos en el rango
+    time_display = time[indices]
+    signal_display = signal[indices]
 
-    time_display = time[indices_in_range]
-    signal_display = signal[indices_in_range]
     fig, ax = plt.subplots(figsize=(15, 6))
+    ax.plot(time_display, signal_display, color='black', linewidth=0.75)
 
-    # Plotear la señal dentro del rango seleccionado
-    ax.plot(time_display, signal_display, color='black', linewidth=0.75, label=lead_name)
+    # Fondo tipo papel ECG
+    ax.set_facecolor('#fff5f5')
 
-    # Configurar la cuadrícula tipo papel ECG
-    minor_grid_interval_ms = 40
-    major_grid_interval_ms = 200
+    # Cuadrícula milimétrica
+    ax.xaxis.set_minor_locator(plt.MultipleLocator(40))    # 1 mm = 40 ms
+    ax.xaxis.set_major_locator(plt.MultipleLocator(200))   # 5 mm = 200 ms
+    ax.yaxis.set_minor_locator(plt.MultipleLocator(0.1))   # 1 mm = 0.1 mV
+    ax.yaxis.set_major_locator(plt.MultipleLocator(0.5))   # 5 mm = 0.5 mV
 
-    minor_grid_interval_mv = 0.1
-    major_grid_interval_mv = 0.5
+    ax.grid(which='minor', color='lightgray', linewidth=0.5)
+    ax.grid(which='major', color='red', linewidth=0.8)
 
-    ax.grid(which='both', axis='both', linestyle='-', color='lightgray', linewidth=0.5, zorder=-1)
-
-    y_min, y_max = signal_display.min(), signal_display.max() 
-
-    major_v_start = np.floor(x_min / major_grid_interval_ms) * major_grid_interval_ms
-    major_h_start = np.floor(y_min / major_grid_interval_mv) * major_grid_interval_mv
-
-
-    v_lines = np.arange(major_v_start, x_max + major_grid_interval_ms, major_grid_interval_ms)
-    for vline in v_lines:
-
-         if vline >= x_min and vline <= x_max + major_grid_interval_ms:
-             ax.axvline(x=vline, color='gray', linestyle='-', linewidth=1, zorder=0)
-
-    h_lines = np.arange(major_h_start, y_max + major_grid_interval_mv, major_grid_interval_mv)
-    for hline in h_lines:
-         if hline >= y_min and hline <= y_max + major_grid_interval_mv:
-             ax.axhline(y=hline, color='gray', linestyle='-', linewidth=1, zorder=0)
-    # configuración de la cuadrícula
-
-    # Configurar etiquetas de los ejes para reflejar ms y mV
     ax.set_xlabel("Tiempo (ms)")
     ax.set_ylabel("Voltaje (mV)")
-    ax.set_title(f"Señal ECG ({lead_name}) con Cuadrícula de Papel ECG")
+    ax.set_title(f"Señal ECG ({lead_name}) con Cuadrícula y Barra de Calibración")
+
+    # Ejes
     ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_min - major_grid_interval_mv, y_max + major_grid_interval_mv)
+    ax.set_ylim(-1.0, 1.0)  # fijo para claridad y proporción
+
+    ax.tick_params(axis='x', labelrotation=45, labelsize=8)
+
+    # Barra de calibración: 1 mV de altura x 200 ms de ancho
+    cal_x = x_min + 100
+    cal_w = 200
+    cal_h = 1.0
+    ax.plot([cal_x, cal_x], [0, cal_h], color='black', linewidth=2)
+    ax.plot([cal_x, cal_x + cal_w], [cal_h, cal_h], color='black', linewidth=2)
+    ax.plot([cal_x + cal_w, cal_x + cal_w], [cal_h, 0], color='black', linewidth=2)
 
     st.pyplot(fig)
     plt.close(fig)
 
+def plot_qrs_detection_single_lead(signal, time, qrs_indices, fs, lead_name="ECG", x_range=None):
+    st.write(f"Visualización de picos R detectados en **{lead_name}** con cuadrícula ECG.")
 
-def plot_qrs_detection_single_lead(signal, time, qrs_indices, fs, lead_name="ECG Signal", x_range=None): # <-- Añadir x_range=None
-    """
-    Plotea una única señal ECG con picos R detectados sobre una cuadrícula tipo papel ECG,
-    permitiendo especificar el rango del eje X.
+    x_min, x_max = x_range if x_range else (time[0], time[-1])
+    indices = np.where((time >= x_min) & (time <= x_max))[0]
 
-    Args:
-        signal (np.ndarray): Array NumPy con los valores de voltaje de la señal (ya en mV).
-        time (np.ndarray): Array NumPy con los valores de tiempo correspondientes (ya en ms).
-        qrs_indices (np.ndarray): Array NumPy con los índices de los picos R detectados.
-        fs (int): Frecuencia de muestreo de la señal en Hz.
-        lead_name (str): Nombre de la derivación a mostrar.
-        x_range (list or tuple, optional): Rango de tiempo [min_ms, max_ms] para el eje X.
-                                           Si es None, se usa el rango completo.
-    """
-    st.write(f"Mostrando los picos R detectados en la derivación '{lead_name}'...")
+    if len(indices) == 0:
+        st.warning("El rango de tiempo seleccionado no contiene datos.")
+        return
 
-    # Validar y ajustar el rango X
-    display_x_range = validate_x_range(x_range, time)
-    x_min, x_max = display_x_range
+    time_display = time[indices]
+    signal_display = signal[indices]
 
-    # Filtrar datos de la señal para el rango de visualización
-    indices_in_range = np.where((time >= x_min) & (time <= x_max))[0]
-    if len(indices_in_range) == 0:
-        st.warning("El rango de tiempo seleccionado no contiene datos de señal para mostrar picos R.")
-        return # Salir si no hay datos en el rango
+    fig, ax = plt.subplots(figsize=(15, 6))
+    ax.plot(time_display, signal_display, color='black', linewidth=0.75)
 
-    time_display = time[indices_in_range]
-    signal_display = signal[indices_in_range]
+    # Fondo ECG
+    ax.set_facecolor('#fff5f5')
 
-    # Filtrar los picos R para incluir solo aquellos dentro del rango de tiempo visible
-    qrs_indices_in_range = qrs_indices[(time[qrs_indices] >= x_min) & (time[qrs_indices] <= x_max)]
-
-
-    fig, ax = plt.subplots(figsize=(15, 6)) 
-
-    # Plotear la señal dentro del rango seleccionado
-    ax.plot(time_display, signal_display, color='black', linewidth=0.75, label=lead_name)
-
-    # Plotear los picos R detectados que están dentro del rango seleccionado
-    time_qrs_in_range = time[qrs_indices_in_range]
-    signal_qrs_in_range = signal[qrs_indices_in_range]
-    ax.plot(time_qrs_in_range, signal_qrs_in_range, 'ro', markersize=5, zorder=10, label='Picos R') # zorder para asegurar que los marcadores estén arriba
-
-
-    # Configurar la cuadrícula tipo papel ECG
-    minor_grid_interval_ms = 40
-    major_grid_interval_ms = 200
-
-    minor_grid_interval_mv = 0.1
-    major_grid_interval_mv = 0.5
-
-    ax.grid(which='both', axis='both', linestyle='-', color='lightgray', linewidth=0.5, zorder=-1)
-
-    y_min, y_max = signal_display.min(), signal_display.max() # Usar el rango de la señal visible
-
-    major_v_start = np.floor(x_min / major_grid_interval_ms) * major_grid_interval_ms
-    major_h_start = np.floor(y_min / major_grid_interval_mv) * major_grid_interval_mv
-
-    v_lines = np.arange(major_v_start, x_max + major_grid_interval_ms, major_grid_interval_ms)
-    for vline in v_lines:
-         if vline >= x_min and vline <= x_max + major_grid_interval_ms:
-             ax.axvline(x=vline, color='gray', linestyle='-', linewidth=1, zorder=0)
-
-    h_lines = np.arange(major_h_start, y_max + major_grid_interval_mv, major_grid_interval_mv)
-    for hline in h_lines:
-         if hline >= y_min and hline <= y_max + major_grid_interval_mv:
-             ax.axhline(y=hline, color='gray', linestyle='-', linewidth=1, zorder=0)
-    # Fin configuración de la cuadrícula
-
+    # Cuadrícula
+    ax.xaxis.set_minor_locator(plt.MultipleLocator(40))
+    ax.xaxis.set_major_locator(plt.MultipleLocator(200))
+    ax.yaxis.set_minor_locator(plt.MultipleLocator(0.1))
+    ax.yaxis.set_major_locator(plt.MultipleLocator(0.5))
+    ax.grid(which='minor', color='lightgray', linestyle='-', linewidth=0.5)
+    ax.grid(which='major', color='red', linestyle='-', linewidth=0.8)
 
     ax.set_xlabel("Tiempo (ms)")
     ax.set_ylabel("Voltaje (mV)")
-    ax.set_title(f"Picos R detectados en la derivación '{lead_name}'")
-    ax.legend()
-    ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_min - major_grid_interval_mv, y_max + major_grid_interval_mv)
+    ax.set_title(f"Picos R en {lead_name} con Cuadrícula de Papel ECG")
 
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(-1.0, 1.0)
+    ax.tick_params(axis='x', labelrotation=45, labelsize=8)
+
+    # picos R
+    qrs_times = time[qrs_indices]
+    qrs_in_range = (qrs_times >= x_min) & (qrs_times <= x_max)
+    qrs_shown = qrs_times[qrs_in_range]
+    signal_qrs = signal[qrs_indices[qrs_in_range]]
+
+    ax.scatter(qrs_shown, signal_qrs, color='red', marker='o', s=60, label="Picos R")
+    ax.legend(loc='upper right')
+
+    # Barra de calibración
+    cal_x = x_min + 100
+    cal_w = 200
+    cal_h = 1.0
+    ax.plot([cal_x, cal_x], [0, cal_h], color='black', linewidth=2)
+    ax.plot([cal_x, cal_x + cal_w], [cal_h, cal_h], color='black', linewidth=2)
+    ax.plot([cal_x + cal_w, cal_x + cal_w], [cal_h, 0], color='black', linewidth=2)
 
     st.pyplot(fig)
     plt.close(fig)

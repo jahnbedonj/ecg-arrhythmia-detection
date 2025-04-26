@@ -1,6 +1,6 @@
 import neurokit2 as nk
 import numpy as np
-import streamlit as st # Importar streamlit para posibles mensajes de estado
+import streamlit as st 
 
 def detect_peaks_neurokit2(signal, fs):
     """
@@ -20,7 +20,6 @@ def detect_peaks_neurokit2(signal, fs):
 
     try:
         # Procesar la señal ECG para obtener los picos R
-        # ** Eliminado handle_artifacts=False **
         _, info = nk.ecg_peaks(signal, sampling_rate=fs)
 
         # Devolver los índices de los picos R
@@ -57,7 +56,7 @@ def calculate_heart_rate(qrs_indices, fs):
     # Convertir los intervalos RR a segundos
     rr_intervals_sec = rr_intervals_samples / fs
 
-    # Convertir los intervalos RR a milisegundos (útil para visualizar o mostrar)
+    # Convertir los intervalos RR a milisegundos
     rr_intervals_ms = rr_intervals_sec * 1000
 
     # Calcular la frecuencia cardíaca promedio en latidos por minuto (bpm)

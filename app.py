@@ -1,21 +1,19 @@
 import streamlit as st
 import os
 import numpy as np
-import pandas as pd
 import wfdb
-import matplotlib.pyplot as plt
-from src import file_upload, data_preprocessing, visualization, analysis
+from src import file_upload, visualization, analysis
 import neurokit2 as nk
+from src.chatgpt_integration import interpret_ecg_results
 
 
-st.set_page_config(page_title="Análisis de ECG", page_icon=":heartpulse:", layout="wide") # Layout wide usa más ancho de la página
+st.set_page_config(page_title="Análisis de ECG", page_icon=":heartpulse:", layout="wide")
 
 # Directorio temporal para guardar archivos cargados
 temp_data_dir = "temp_data"
 os.makedirs(temp_data_dir, exist_ok=True)
 
-
-def main(): # O 'app' si has renombrado la función
+def main(): 
     st.title("Análisis de Señales ECG")
 
     # Cargar archivos
@@ -25,10 +23,9 @@ def main(): # O 'app' si has renombrado la función
 
     if uploaded_files:
         # Guarda los archivos cargados en el directorio temporal y retorna sus rutas
-        # Asegúrate de que file_upload.upload_files maneje correctamente el temp_data_dir
         mat_file_path, hea_file_path = file_upload.upload_files(uploaded_files)
 
-        # Verificar que ambos archivos necesarios fueron cargados y guardados
+        # Se verifica que ambos archivos fueron cargados y guardados
         if mat_file_path and hea_file_path:
             st.success("Archivos cargados correctamente.")
 
@@ -93,7 +90,7 @@ def main(): # O 'app' si has renombrado la función
                 full_min_time_ms = time_ms.min() if len(time_ms) > 0 else 0
                 full_max_time_ms = time_ms.max() if len(time_ms) > 0 else 0
 
-                # ** Controles deslizantes para el Rango de Tiempo (Simulación de Zoom/Pan) **
+                # ** Controles deslizantes para el Rango de Tiempo **
                 st.subheader("Rango de Tiempo de Visualización (ms)")
 
                 max_slider_range = max(full_max_time_ms, 1000.0)
@@ -112,64 +109,67 @@ def main(): # O 'app' si has renombrado la función
 
                 # Validar y definir el rango de tiempo seleccionado
                 if start_time >= end_time:
-                     st.warning("El tiempo de inicio debe ser menor que el tiempo de fin. Ajusta los sliders.")
-                     # Usar un rango por defecto si los sliders están invertidos
-                     selected_x_range = (full_min_time_ms, full_max_time_ms) # O podrías establecer un rango pequeño por defecto
+                     st.warning("El tiempo de inicio debe ser menor que el tiempo de fin. Ajusta los sliders.")                     
+                     selected_x_range = (full_min_time_ms, full_max_time_ms) 
                 else:
                     selected_x_range = (start_time, end_time)
 
 
-                # --- Visualización con Cuadrícula (Objetivo 1) ---
+                # Visualización con Cuadrícula
                 st.header("Visualización de la Señal ECG con Cuadrícula")
                 visualization.plot_ecg_signal_single_lead(signal_to_process, time_ms, fs, selected_lead_name, x_range=selected_x_range)
 
 
-                # --- Análisis de Frecuencia Cardiaca (Objetivo 2) ---
+                # Análisis de Frecuencia Cardiaca
                 st.header("Análisis de Frecuencia Cardiaca")
                 st.write(f"Análisis basado en la derivación: **{selected_lead_name}**")
 
-                # ** Detección de Picos R con NeuroKit2 **
+                # Detección de Picos R con NeuroKit2
                 st.subheader("Detección de Picos R")
                 st.write("Realizando detección de picos R usando NeuroKit2...")
-
-                # Detectar picos R en la señal COMPLETA (necesitamos todos los picos para análisis general si se requiere)
+                # Inicializar heart_rate con un valor predeterminado
+                heart_rate = None
+                # Detectar picos R en la señal COMPLETA
                 all_qrs_indices = analysis.detect_peaks_neurokit2(signal_to_process, fs)
 
                 if len(all_qrs_indices) > 0:
-                    # ** Mostrar el conteo total de picos detectados como referencia **
-                    st.write(f"Total de picos R detectados en la señal completa: **{len(all_qrs_indices)}**")
+                    # Calcular la frecuencia cardíaca promedio
+                    if len(all_qrs_indices) > 1:
+                        heart_rate, _ = analysis.calculate_heart_rate(all_qrs_indices, fs)
+                    else:
+                        heart_rate = 0  # Si no hay suficientes picos, asignar 0 o un valor predeterminado
 
-                    # ** Filtrar picos R para el rango de tiempo visible **
+                    # Filtrar picos R para el rango de tiempo visible
                     # Convertir los índices de todos los picos a tiempo en ms
                     all_qrs_times_ms = time_ms[all_qrs_indices]
 
                     # Encontrar los índices de los picos (de la lista completa) que caen dentro del rango de tiempo visible
-                    # Usamos np.where para obtener los índices *dentro* de all_qrs_indices
+                    # Usamos np.where para obtener los índices dentro de all_qrs_indices
                     indices_of_visible_peaks_in_all = np.where(
                         (all_qrs_times_ms >= selected_x_range[0]) &
                         (all_qrs_times_ms <= selected_x_range[1])
                     )[0] # [0] porque np.where devuelve una tupla con un array
 
-                    # Obtener los *índices originales* de los picos que están en el rango visible
+                    # Obtener los índices originales de los picos que están en el rango visible
                     qrs_indices_in_visible_range = all_qrs_indices[indices_of_visible_peaks_in_all]
 
 
-                    # ** Mostrar el conteo de picos en el rango visible **
+                    # Mostrar el conteo de picos en el rango visible
                     st.success(f"Picos R visibles en el rango seleccionado: **{len(qrs_indices_in_visible_range)}**")
 
 
-                    # ** Visualización de Picos R detectados **
+                    # Visualización de Picos R detectados
                     # Pasamos all_qrs_indices a la función de visualización porque ella filtra internamente
                     visualization.plot_qrs_detection_single_lead(signal_to_process, time_ms, all_qrs_indices, fs, selected_lead_name, x_range=selected_x_range)
 
 
-                    # ** Cálculo y Alerta de Frecuencia Cardiaca **
+                    # Cálculo y Alerta de Frecuencia Cardiaca
                     st.subheader("Frecuencia Cardiaca Promedio")
 
-                    # ** Calcular FC y RR solo con los picos R dentro del rango visible **
+                    # Calcular FC y RR solo con los picos R dentro del rango visible
                     # Si hay suficientes picos en el rango visible para calcular al menos un intervalo RR
                     if len(qrs_indices_in_visible_range) > 1:
-                        # Nota: calculate_heart_rate espera los *índices originales* de los picos
+                        
                         heart_rate, rr_intervals_ms = analysis.calculate_heart_rate(qrs_indices_in_visible_range, fs)
 
                         if heart_rate is not None:
@@ -207,17 +207,19 @@ def main(): # O 'app' si has renombrado la función
                 st.exception(e)
         else:
             st.warning("Asegúrate de subir tanto el archivo .mat como el .hea para el registro completo. Ambos son necesarios.")
+        # Generar un resumen de los resultados del ECG
+        ecg_summary = f"""
+        Análisis de ECG:
+        - Derivación seleccionada: {selected_lead_name}
+        - Frecuencia cardíaca promedio: {heart_rate:.2f} bpm
+        - Total de picos R detectados: {len(all_qrs_indices)}
+        - Observaciones: {'Frecuencia cardíaca fuera del rango normal' if heart_rate < 60 or heart_rate > 100 else 'Frecuencia cardíaca dentro del rango normal'}
+        """
 
-    # Opcional: Limpiar archivos temporales al finalizar la ejecución del script
-    # import shutil
-    # if os.path.exists(temp_data_dir):
-    #     try:
-    #         # shutil.rmtree(temp_data_dir)
-    #         if mat_file_path and os.path.exists(mat_file_path): os.unlink(mat_file_path)
-    #         if hea_file_path and os.path.exists(hea_file_path): os.unlink(hea_file_path)
-    #     except Exception as e:
-    #         print(f"Error removing temporary files: {e}")
-
+        # Interpretar los resultados usando ChatGPT
+        st.header("Interpretación del ECG")
+        interpretation = interpret_ecg_results(ecg_summary)
+        st.write(interpretation)
 
 if __name__ == "__main__":
     main()
