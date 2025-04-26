@@ -2,8 +2,14 @@ import openai
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Cargar las claves desde el archivo .env (para entorno local)
+if os.getenv("STREAMLIT_ENV") != "cloud":
+    load_dotenv()
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+else:
+    # Cargar las claves desde Streamlit Secrets (para Streamlit Cloud)
+    openai.api_key = st.secrets["OPENAI_API_KEY"]
+    openai.organization = st.secrets.get("OPENAI_ORGANIZATION", None)
 
 def interpret_ecg_results(ecg_summary):
     """
